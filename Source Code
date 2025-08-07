@@ -1,0 +1,76 @@
+// MQ135 Gas Sensor on GPIO36 
+#define MQ135_PIN 36 
+// TDS Sensor on GPIO34 
+#define TDS_PIN 34 
+#define VREF 3.3 
+#define ADC_RANGE 4096 
+float lastTds = 0.0; 
+float tdsHistory[5] = {0.0}; 
+int historyIndex = 0; 
+void setup() { 
+Serial.begin(115200); 
+delay(1000); // Sensor warm-up 
+Serial.println("Food Spoilage Detection Initialized"); 
+} 
+void loop() { 
+// === MQ135 Gas Sensor Reading === 
+int mq135Value = analogRead(MQ135_PIN); 
+float gasVoltage = mq135Value * (VREF / ADC_RANGE); 
+Serial.print("Gas Voltage (MQ135): "); 
+Serial.print(gasVoltage); 
+Serial.println(" V"); 
+// === TDS Sensor Reading === 
+int tdsValue = analogRead(TDS_PIN); 
+float tdsVoltage = tdsValue * (VREF / ADC_RANGE); 
+// Handle dry probe: assume zero TDS if voltage is too low 
+39 
+40 
+ 
+  float tds = 0.0; 
+  if (tdsVoltage > 0.1) {  // Threshold: sensor must be submerged 
+    tds = tdsVoltage * 500;  // Adjust multiplier as per calibration 
+  } else { 
+    tds = 0.0; 
+  } 
+ 
+  // Update TDS history 
+  tdsHistory[historyIndex] = tds; 
+  historyIndex = (historyIndex + 1) % 5; 
+ 
+  // Calculate variability 
+  float avgTds = 0; 
+  for (int i = 0; i < 5; i++) avgTds += tdsHistory[i]; 
+  avgTds /= 5; 
+ 
+  float variability = 0; 
+  for (int i = 0; i < 5; i++) variability += abs(tdsHistory[i] - avgTds); 
+  variability /= 5; 
+ 
+  // Rate of change 
+  float rateOfChange = tds - lastTds; 
+  lastTds = tds; 
+ 
+  // Print TDS readings 
+  Serial.print("TDS Voltage: "); 
+  Serial.print(tdsVoltage, 2); 
+  Serial.print(" V, TDS: "); 
+  Serial.print(tds, 2); 
+  Serial.print(" ppm, Variability: "); 
+  Serial.print(variability, 2); 
+  Serial.print(" ppm, Rate of Change: "); 
+  Serial.print(rateOfChange, 2); 
+  Serial.println(" ppm/s"); 
+ 
+// === Spoilage Logic === 
+bool gasHigh = gasVoltage > 1.3;  // Tune threshold via real testing 
+bool tdsSpoiled = tds > 900 || variability > 50 || abs(rateOfChange) > 50; 
+if (gasHigh && tdsSpoiled) { 
+Serial.println(" Both sensors indicate spoilage: food may be spoiled."); 
+} else if (gasHigh || tdsSpoiled) { 
+Serial.println("Likely spoilage may be present."); 
+} else { 
+Serial.println(" Fresh: No spoilage detected."); 
+} 
+Serial.println("---------------------------------------------------"); 
+delay(1000); // 1-second interval 
+} 
